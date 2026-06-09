@@ -1,0 +1,13 @@
+# Supabase
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=sua_anon_key_aqui
+
+# Telegram
+TELEGRAM_BOT_TOKEN=8845963727:AAGlVff0ccJe3rXPbEB1dTv4fPOEYK0tcXs
+TELEGRAM_CHANNEL_ID=-1003667622366
+
+# Admin
+ADMIN_SECRET=escolha_uma_senha_forte
+
+# Port
+PORT=3000
