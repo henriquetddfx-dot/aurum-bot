@@ -118,7 +118,8 @@ app.post('/admin/license', async (req, res) => {
     .select().single();
 
   if (error) return res.status(500).json({ error });
-  await sendTelegram(`🔑 Nova licença ativada\nConta: <code>${mt5_account}</code>`);
+  // Notificação interna apenas — não vai para o canal público
+  console.log(`Licença ativada: ${mt5_account} | plano: ${plan}`);
   return res.json({ ok: true, data });
 });
 
