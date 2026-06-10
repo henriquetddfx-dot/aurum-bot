@@ -23,35 +23,40 @@ async function sendTelegram(text) {
 }
 
 function buildTradeMessage(t) {
-  const isWin   = t.profit_usd > 0;
-  const dir     = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
-  const profit  = t.profit_usd;
-  const pct     = t.profit_pct ? Math.abs(t.profit_pct).toFixed(2) : Math.abs(t.rr_achieved * 100).toFixed(2);
-  const sign    = isWin ? '+' : '-';
+  const profit = t.profit_usd;
+  const dir    = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
 
-  if (isWin) {
-    return `🏆 <b>TAKE!!!!</b> 🏆
-
-${dir}  ·  XAU/USD
-📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
-🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
-
-💰 <b>+$${Math.abs(profit).toFixed(2)}</b>  ·  <b>+${pct}% do saldo</b>
-
-🚀🔥💎
-
-<i>AURUM EA — Ouro. Automatizado.</i>`;
+  // Determina tipo de resultado
+  let tipo, header;
+  if (profit >= -5 && profit <= 5) {
+    tipo   = 'be';
+    header = `⚪ <b>BREAK EVEN</b>`;
+  } else if (profit > 5 && profit <= 30) {
+    tipo   = 'parcial';
+    header = `✅ <b>PARCIAL</b>`;
+  } else if (profit > 30) {
+    tipo   = 'take';
+    header = `🏆 <b>TAKE!!!!</b> 🏆`;
   } else {
-    return `❌ <b>LOSS</b>
+    tipo   = 'loss';
+    header = `❌ <b>LOSS</b>`;
+  }
+
+  const profitStr = profit >= 0
+    ? `+$${Math.abs(profit).toFixed(2)}`
+    : `-$${Math.abs(profit).toFixed(2)}`;
+
+  const emojis = tipo === 'take' ? '\n\n🚀🔥💎' : '';
+
+  return `${header}
 
 ${dir}  ·  XAU/USD
 📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
 🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
 
-💸 <b>-$${Math.abs(profit).toFixed(2)}</b>  ·  <b>-${pct}% do saldo</b>
+💰 <b>${profitStr}</b>${emojis}
 
 <i>AURUM EA — Ouro. Automatizado.</i>`;
-  }
 }
 
 // ── Rotas ─────────────────────────────────────────────────────────────
