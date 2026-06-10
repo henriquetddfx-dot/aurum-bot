@@ -218,5 +218,109 @@ app.post('/summary/monthly', async (req, res) => {
 });
 
 
+
+// ── /ativar — recebe credenciais do cliente e cadastra no MetaApi ──
+app.post('/ativar', async (req, res) => {
+  const { email, login, password, server } = req.body;
+  if (!email || !login || !password || !server)
+    return res.status(400).json({ error: 'missing_fields' });
+
+  // Verifica se o email tem assinatura ativa na HubLa/Supabase
+  const { data: lic } = await supabase
+    .from('aurum_licenses')
+    .select('*')
+    .eq('email', email)
+    .eq('active', true)
+    .single();
+
+  if (!lic) return res.json({ ok: false, error: 'not_found' });
+
+  // Salva credenciais MT5 do cliente (criptografadas em produção futura)
+  await supabase
+    .from('aurum_licenses')
+    .update({
+      mt5_account: login,
+      mt5_server:  server,
+      mt5_password: password, // TODO: criptografar com AES antes de salvar
+      status: 'pending_metaapi'
+    })
+    .eq('email', email);
+
+  // TODO: Chamar MetaApi CopyFactory aqui quando token estiver disponível
+  // const metaapiResult = await registerMetaApiSubscriber(login, password, server);
+
+  // Notifica você via Telegram (privado — não vai pro canal público)
+  const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+  if (ADMIN_CHAT) {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT,
+        text: `🔔 <b>Nova ativação pendente</b>\n\nEmail: <code>${email}</code>\nConta MT5: <code>${login}</code>\nServidor: <code>${server}</code>\n\n→ Ativar no MetaApi`,
+        parse_mode: 'HTML'
+      })
+    });
+  }
+
+  console.log(`Ativação: ${email} | MT5: ${login} | Server: ${server}`);
+  return res.json({ ok: true });
+});
+
+// ── Webhook HubLa — dispara quando cliente paga ────────────────────
+app.post('/webhook/hubla', async (req, res) => {
+  const event = req.body;
+  console.log('HubLa webhook:', JSON.stringify(event).substring(0, 200));
+
+  // Evento de nova assinatura
+  if (event.type === 'subscription.created' || event.type === 'purchase.completed') {
+    const email = event.data?.customer?.email || event.data?.email;
+    const name  = event.data?.customer?.name  || event.data?.name || '';
+    if (!email) return res.json({ ok: true });
+
+    // Cria licença pendente no Supabase
+    await supabase.from('aurum_licenses').upsert({
+      email,
+      name,
+      plan:   'monthly',
+      active: true,
+      status: 'pending_activation',
+      expires_at: new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString()
+    }, { onConflict: 'email' });
+
+    // Notifica você
+    const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+    if (ADMIN_CHAT) {
+      await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT,
+          text: `💳 <b>Nova assinatura!</b>\n\nNome: ${name}\nEmail: <code>${email}</code>\nStatus: aguardando ativação MT5\n\n→ aurum.tddprotocol.com/ativar`,
+          parse_mode: 'HTML'
+        })
+      });
+    }
+
+    console.log(`Nova assinatura: ${email}`);
+  }
+
+  // Evento de cancelamento/chargeback
+  if (event.type === 'subscription.cancelled' || event.type === 'subscription.expired') {
+    const email = event.data?.customer?.email || event.data?.email;
+    if (!email) return res.json({ ok: true });
+
+    await supabase
+      .from('aurum_licenses')
+      .update({ active: false, status: 'cancelled' })
+      .eq('email', email);
+
+    // TODO: Remover subscriber do MetaApi
+    console.log(`Assinatura cancelada: ${email}`);
+  }
+
+  return res.json({ ok: true });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AURUM EA API rodando na porta ${PORT}`));
