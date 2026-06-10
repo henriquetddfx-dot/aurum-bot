@@ -26,10 +26,7 @@ function buildTradeMessage(t) {
   const emoji  = t.profit_usd >= 0 ? '✅' : '❌';
   const dir    = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
   const sign   = t.profit_usd >= 0 ? '+' : '';
-  const rr     = t.rr_achieved >= 0
-    ? `${t.rr_achieved.toFixed(1)}R`
-    : `${t.rr_achieved.toFixed(1)}R`;
-  const sess   = t.session === 'LONDON' ? '🇬🇧 London' : '🇺🇸 New York';
+  const rr     = `${Math.abs(t.rr_achieved).toFixed(1)}R`;
 
   return `${emoji} <b>Trade Fechado</b>
 
@@ -38,10 +35,7 @@ ${dir}  ·  XAU/USD
 🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
 
 💰 Resultado:  <b>${sign}$${Math.abs(t.profit_usd).toFixed(2)}</b>
-⚠️ Risco máx:  R$50
 📊 RR:         <b>${rr}</b>
-
-${sess}
 
 <i>AURUM EA — Ouro. Automatizado.</i>`;
 }
