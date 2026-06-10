@@ -23,11 +23,11 @@ async function sendTelegram(text) {
 }
 
 function buildTradeMessage(t) {
-  const isWin  = t.profit_usd > 0;
-  const dir    = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
-  const profit = t.profit_usd;
-  const rr     = t.rr_achieved;
-  const pct    = Math.abs(rr * 100).toFixed(1); // % do risco
+  const isWin   = t.profit_usd > 0;
+  const dir     = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
+  const profit  = t.profit_usd;
+  const pct     = t.profit_pct ? Math.abs(t.profit_pct).toFixed(2) : Math.abs(t.rr_achieved * 100).toFixed(2);
+  const sign    = isWin ? '+' : '-';
 
   if (isWin) {
     return `🏆 <b>TAKE!!!!</b> 🏆
@@ -36,8 +36,7 @@ ${dir}  ·  XAU/USD
 📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
 🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
 
-💰 <b>+$${Math.abs(profit).toFixed(2)}</b>
-📊 RR: <b>${Math.abs(rr).toFixed(2)}R</b>  ·  <b>+${pct}%</b> do risco
+💰 <b>+$${Math.abs(profit).toFixed(2)}</b>  ·  <b>+${pct}% do saldo</b>
 
 🚀🔥💎
 
@@ -49,8 +48,7 @@ ${dir}  ·  XAU/USD
 📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
 🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
 
-💸 <b>-$${Math.abs(profit).toFixed(2)}</b>
-📊 Stop: <b>${Math.abs(rr).toFixed(2)}R</b>  ·  <b>-${pct}%</b> do risco
+💸 <b>-$${Math.abs(profit).toFixed(2)}</b>  ·  <b>-${pct}% do saldo</b>
 
 <i>AURUM EA — Ouro. Automatizado.</i>`;
   }
