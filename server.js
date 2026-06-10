@@ -23,21 +23,37 @@ async function sendTelegram(text) {
 }
 
 function buildTradeMessage(t) {
-  const emoji  = t.profit_usd >= 0 ? '✅' : '❌';
+  const isWin  = t.profit_usd > 0;
   const dir    = t.direction === 'BUY' ? '🟢 BUY' : '🔴 SELL';
-  const sign   = t.profit_usd >= 0 ? '+' : '';
-  const rr     = `${Math.abs(t.rr_achieved).toFixed(1)}R`;
+  const profit = t.profit_usd;
+  const rr     = t.rr_achieved;
+  const pct    = Math.abs(rr * 100).toFixed(1); // % do risco
 
-  return `${emoji} <b>Trade Fechado</b>
+  if (isWin) {
+    return `🏆 <b>TAKE!!!!</b> 🏆
 
 ${dir}  ·  XAU/USD
 📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
 🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
 
-💰 Resultado:  <b>${sign}$${Math.abs(t.profit_usd).toFixed(2)}</b>
-📊 RR:         <b>${rr}</b>
+💰 <b>+$${Math.abs(profit).toFixed(2)}</b>
+📊 RR: <b>${Math.abs(rr).toFixed(2)}R</b>  ·  <b>+${pct}%</b> do risco
+
+🚀🔥💎
 
 <i>AURUM EA — Ouro. Automatizado.</i>`;
+  } else {
+    return `❌ <b>LOSS</b>
+
+${dir}  ·  XAU/USD
+📍 Entrada:  <code>${t.entry.toFixed(2)}</code>
+🏁 Saída:    <code>${t.exit_price.toFixed(2)}</code>
+
+💸 <b>-$${Math.abs(profit).toFixed(2)}</b>
+📊 Stop: <b>${Math.abs(rr).toFixed(2)}R</b>  ·  <b>-${pct}%</b> do risco
+
+<i>AURUM EA — Ouro. Automatizado.</i>`;
+  }
 }
 
 // ── Rotas ─────────────────────────────────────────────────────────────
@@ -130,6 +146,79 @@ app.delete('/admin/license/:account', async (req, res) => {
 
   return res.json({ ok: true });
 });
+
+// ── Resumo semanal (chame via cron ou manualmente) ──────────────────
+app.post('/summary/weekly', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== process.env.ADMIN_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from('aurum_trades')
+    .select('*')
+    .gte('closed_at', weekAgo);
+
+  if (!data || data.length === 0)
+    return res.json({ ok: true, message: 'sem trades na semana' });
+
+  const total   = data.length;
+  const wins    = data.filter(t => t.profit_usd > 0).length;
+  const losses  = total - wins;
+  const profit  = data.reduce((s, t) => s + t.profit_usd, 0);
+  const winrate = ((wins / total) * 100).toFixed(1);
+  const sign    = profit >= 0 ? '+' : '';
+
+  const msg = `📊 <b>Resumo Semanal — AURUM EA</b>
+
+💰 Resultado: <b>${sign}$${Math.abs(profit).toFixed(2)}</b>
+✅ Wins: <b>${wins}</b>  ·  ❌ Losses: <b>${losses}</b>
+📈 Win Rate: <b>${winrate}%</b>
+🔢 Total de trades: <b>${total}</b>
+
+<i>AURUM EA — Ouro. Automatizado.</i>`;
+
+  await sendTelegram(msg);
+  return res.json({ ok: true });
+});
+
+// ── Resumo mensal ────────────────────────────────────────────────────
+app.post('/summary/monthly', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== process.env.ADMIN_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from('aurum_trades')
+    .select('*')
+    .gte('closed_at', monthAgo);
+
+  if (!data || data.length === 0)
+    return res.json({ ok: true, message: 'sem trades no mês' });
+
+  const total   = data.length;
+  const wins    = data.filter(t => t.profit_usd > 0).length;
+  const losses  = total - wins;
+  const profit  = data.reduce((s, t) => s + t.profit_usd, 0);
+  const winrate = ((wins / total) * 100).toFixed(1);
+  const avgRR   = (data.reduce((s, t) => s + Math.abs(t.rr_achieved), 0) / total).toFixed(2);
+  const sign    = profit >= 0 ? '+' : '';
+
+  const msg = `🗓 <b>Resumo Mensal — AURUM EA</b>
+
+💰 Resultado: <b>${sign}$${Math.abs(profit).toFixed(2)}</b>
+✅ Wins: <b>${wins}</b>  ·  ❌ Losses: <b>${losses}</b>
+📈 Win Rate: <b>${winrate}%</b>
+📊 RR Médio: <b>${avgRR}R</b>
+🔢 Total de trades: <b>${total}</b>
+
+<i>AURUM EA — Ouro. Automatizado.</i>`;
+
+  await sendTelegram(msg);
+  return res.json({ ok: true });
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AURUM EA API rodando na porta ${PORT}`));
