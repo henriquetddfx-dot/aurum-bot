@@ -420,5 +420,69 @@ app.post('/webhook/hubla', async (req, res) => {
   return res.json({ ok: true });
 });
 
+
+// ── Health Check MetaApi ─────────────────────────────────────────────
+// Chamado pelo cron-job toda manhã às 8h
+app.post('/health/metaapi', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== process.env.ADMIN_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  try {
+    // Busca todas as contas no MetaApi
+    const r = await fetch('https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai/users/current/accounts?limit=50', {
+      headers: { 'auth-token': METAAPI_TOKEN }
+    });
+    const accounts = await r.json();
+
+    if (!Array.isArray(accounts)) {
+      await notifyAdmin('⚠️ <b>AURUM EA — Health Check</b>\n\nErro ao buscar contas no MetaApi.');
+      return res.json({ ok: false, error: 'invalid_response' });
+    }
+
+    const issues = [];
+    let allOk = true;
+
+    for (const acc of accounts) {
+      const state      = acc.state;        // DEPLOYED, UNDEPLOYED, etc
+      const connected  = acc.connectionStatus; // CONNECTED, DISCONNECTED
+      const name       = acc.name || acc.login;
+
+      if (state !== 'DEPLOYED' || connected === 'DISCONNECTED') {
+        allOk = false;
+        issues.push(`❌ <code>${name}</code> — ${state} / ${connected}`);
+      }
+    }
+
+    const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+
+    if (!allOk && ADMIN_CHAT) {
+      const msg = `⚠️ <b>AURUM EA — Alerta de conexão</b>\n\n${issues.join('\n')}\n\n→ Verifique o MetaApi agora`;
+      await fetch(\`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: ADMIN_CHAT, text: msg, parse_mode: 'HTML' })
+      });
+      console.log('Health check: problemas detectados');
+    } else if (ADMIN_CHAT) {
+      await fetch(\`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT,
+          text: \`✅ <b>AURUM EA — Health Check</b>\n\nTodas as contas conectadas normalmente.\nTotal: \${accounts.length} contas\`,
+          parse_mode: 'HTML'
+        })
+      });
+      console.log('Health check: tudo OK');
+    }
+
+    return res.json({ ok: true, allOk, total: accounts.length, issues });
+  } catch(e) {
+    console.error('Health check error:', e.message);
+    return res.json({ ok: false, error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AURUM EA API rodando na porta ${PORT}`));
