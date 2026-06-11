@@ -62,7 +62,7 @@ ${dir}  ·  XAU/USD
 // ── Rotas ─────────────────────────────────────────────────────────────
 
 // Health
-app.get('/', (req, res) => res.json({ status: 'AURUM EA API online ✅' }));
+app.get('/', (req, res) => res.json({ ok: true }));
 
 // Validação de licença (chamada pelo EA no OnInit)
 app.get('/license', async (req, res) => {
@@ -224,6 +224,79 @@ app.post('/summary/monthly', async (req, res) => {
 
 
 
+
+// ── MetaApi CopyFactory — cadastra subscriber ──────────────────────
+const METAAPI_TOKEN    = process.env.METAAPI_TOKEN;
+const COPYFACTORY_STRATEGY_ID = 'um1N'; // ID da estratégia AURUM EA
+
+async function registerMetaApiSubscriber(login, password, server, email) {
+  // 1. Cria a conta MT5 no MetaApi
+  const createRes = await fetch('https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai/users/current/accounts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'auth-token': METAAPI_TOKEN
+    },
+    body: JSON.stringify({
+      login,
+      password,
+      name: `AURUM EA - ${email}`,
+      server,
+      type: 'cloud-g2',
+      platform: 'mt5',
+      magic: 0,
+      application: 'MetaApi',
+      copyFactoryRoles: ['SUBSCRIBER'],
+      reliability: 'high'
+    })
+  });
+
+  const account = await createRes.json();
+  if (!account.id) throw new Error('Falha ao criar conta: ' + JSON.stringify(account));
+
+  const accountId = account.id;
+  console.log('MetaApi account criada:', accountId);
+
+  // 2. Aguarda a conta ficar deployed (polling simples)
+  await new Promise(r => setTimeout(r, 8000));
+
+  // 3. Adiciona como subscriber na estratégia
+  const subRes = await fetch(`https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai/users/current/configuration/strategies/${COPYFACTORY_STRATEGY_ID}/subscribers/${accountId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'auth-token': METAAPI_TOKEN
+    },
+    body: JSON.stringify({
+      symbolMapping: [],
+      tradeSizeScaling: { mode: 'balanceRisk' }
+    })
+  });
+
+  if (!subRes.ok) {
+    const err = await subRes.text();
+    throw new Error('Falha ao adicionar subscriber: ' + err);
+  }
+
+  console.log('Subscriber adicionado:', accountId);
+  return { accountId };
+}
+
+async function removeMetaApiSubscriber(metaapiId) {
+  if (!metaapiId) return;
+  // Remove da estratégia
+  await fetch(`https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai/users/current/configuration/strategies/${COPYFACTORY_STRATEGY_ID}/subscribers/${metaapiId}`, {
+    method: 'DELETE',
+    headers: { 'auth-token': METAAPI_TOKEN }
+  });
+  // Undeploy a conta
+  await fetch(`https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai/users/current/accounts/${metaapiId}/undeploy`, {
+    method: 'POST',
+    headers: { 'auth-token': METAAPI_TOKEN }
+  });
+  console.log('Subscriber removido:', metaapiId);
+}
+
 // ── /ativar — recebe credenciais do cliente e cadastra no MetaApi ──
 app.post('/ativar', async (req, res) => {
   const { email, login, password, server } = req.body;
@@ -251,8 +324,19 @@ app.post('/ativar', async (req, res) => {
     })
     .eq('email', email);
 
-  // TODO: Chamar MetaApi CopyFactory aqui quando token estiver disponível
-  // const metaapiResult = await registerMetaApiSubscriber(login, password, server);
+  // Cadastra conta no MetaApi como Subscriber
+  try {
+    const metaapiResult = await registerMetaApiSubscriber(login, password, server, email);
+    if (metaapiResult.accountId) {
+      await supabase
+        .from('aurum_licenses')
+        .update({ metaapi_id: metaapiResult.accountId, status: 'active' })
+        .eq('email', email);
+    }
+  } catch(e) {
+    console.error('MetaApi error:', e.message);
+    // Não falha o request — notifica admin para ativar manualmente
+  }
 
   // Notifica você via Telegram (privado — não vai pro canal público)
   const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
@@ -315,12 +399,21 @@ app.post('/webhook/hubla', async (req, res) => {
     const email = event.data?.customer?.email || event.data?.email;
     if (!email) return res.json({ ok: true });
 
+    const { data: licData } = await supabase
+      .from('aurum_licenses')
+      .select('metaapi_id')
+      .eq('email', email)
+      .single();
+
     await supabase
       .from('aurum_licenses')
       .update({ active: false, status: 'cancelled' })
       .eq('email', email);
 
-    // TODO: Remover subscriber do MetaApi
+    // Remove do MetaApi automaticamente
+    if (licData && licData.metaapi_id) {
+      await removeMetaApiSubscriber(licData.metaapi_id);
+    }
     console.log(`Assinatura cancelada: ${email}`);
   }
 
