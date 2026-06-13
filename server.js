@@ -484,5 +484,81 @@ app.post('/health/metaapi', async (req, res) => {
   }
 });
 
+
+// ── Monitor de copy — verifica se trades da master foram copiados ────
+// Chamado a cada 5 minutos via cron-job.org
+app.post('/monitor/copy', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== process.env.ADMIN_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  try {
+    const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+    const headers = { 'auth-token': METAAPI_TOKEN, 'Content-Type': 'application/json' };
+
+    // Busca todas as contas
+    const accRes = await fetch('https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai/users/current/accounts?limit=50', { headers });
+    const accounts = await accRes.json();
+    if (!Array.isArray(accounts)) return res.json({ ok: false, error: 'invalid_accounts' });
+
+    // Separa master e slaves
+    const master = accounts.find(a => a.login === '83101728' || a.name === 'aurum EA');
+    const slaves = accounts.filter(a => a.id !== master?.id);
+
+    if (!master) return res.json({ ok: false, error: 'master_not_found' });
+
+    // Busca posições abertas da master
+    const posRes = await fetch(`https://mt-client-api-v1.london.agiliumtrade.ai/users/current/accounts/${master.id}/positions`, { headers });
+    const masterPositions = await posRes.json();
+
+    if (!Array.isArray(masterPositions) || masterPositions.length === 0)
+      return res.json({ ok: true, message: 'no_open_positions' });
+
+    const issues = [];
+
+    // Verifica cada slave
+    for (const slave of slaves) {
+      if (slave.connectionStatus === 'DISCONNECTED') {
+        issues.push(`⚠️ Slave <code>${slave.name || slave.login}</code> — DESCONECTADA`);
+        continue;
+      }
+
+      const slaveRes = await fetch(`https://mt-client-api-v1.london.agiliumtrade.ai/users/current/accounts/${slave.id}/positions`, { headers });
+      const slavePositions = await slaveRes.json();
+
+      if (!Array.isArray(slavePositions)) continue;
+
+      // Verifica se cada posição da master existe na slave
+      for (const pos of masterPositions) {
+        const copied = slavePositions.some(sp =>
+          sp.symbol === pos.symbol &&
+          sp.type === pos.type &&
+          Math.abs(new Date(sp.time) - new Date(pos.time)) < 5 * 60 * 1000 // 5 min de tolerância
+        );
+        if (!copied) {
+          issues.push(`❌ Trade não copiado na <code>${slave.name || slave.login}</code>\n   ${pos.type} ${pos.symbol} @ ${pos.openPrice}`);
+        }
+      }
+    }
+
+    if (issues.length > 0 && ADMIN_CHAT) {
+      const msg = `🚨 <b>AURUM EA — Copy incompleto</b>\n\n${issues.join('\n\n')}\n\n→ Verifique o MetaApi agora`;
+      await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: ADMIN_CHAT, text: msg, parse_mode: 'HTML' })
+      });
+      console.log('Monitor: problemas detectados', issues.length);
+    } else {
+      console.log('Monitor: copy OK, posições abertas:', masterPositions.length);
+    }
+
+    return res.json({ ok: true, positions: masterPositions.length, issues: issues.length });
+  } catch(e) {
+    console.error('Monitor error:', e.message);
+    return res.json({ ok: false, error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AURUM EA API rodando na porta ${PORT}`));
