@@ -458,19 +458,19 @@ app.post('/health/metaapi', async (req, res) => {
 
     if (!allOk && ADMIN_CHAT) {
       const msg = `⚠️ <b>AURUM EA — Alerta de conexão</b>\n\n${issues.join('\n')}\n\n→ Verifique o MetaApi agora`;
-      await fetch(\`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage\`, {
+      await fetch(`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: ADMIN_CHAT, text: msg, parse_mode: 'HTML' })
       });
       console.log('Health check: problemas detectados');
     } else if (ADMIN_CHAT) {
-      await fetch(\`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage\`, {
+      await fetch(`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: ADMIN_CHAT,
-          text: \`✅ <b>AURUM EA — Health Check</b>\n\nTodas as contas conectadas normalmente.\nTotal: \${accounts.length} contas\`,
+          text: `✅ <b>AURUM EA — Health Check</b>\n\nTodas as contas conectadas normalmente.\nTotal: \${accounts.length} contas`,
           parse_mode: 'HTML'
         })
       });
