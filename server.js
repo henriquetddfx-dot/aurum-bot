@@ -121,18 +121,17 @@ app.post('/trade', async (req, res) => {
 
 // Admin: adiciona licença
 app.post('/admin/license', async (req, res) => {
-  const { secret, mt5_account, plan, expires_at } = req.body;
+  const { secret, mt5_account, plan, expires_at, email, name } = req.body;
   if (secret !== process.env.ADMIN_SECRET)
     return res.status(401).json({ error: 'unauthorized' });
 
   const { data, error } = await supabase
     .from('aurum_licenses')
-    .upsert({ mt5_account, plan: plan || 'monthly', active: true, expires_at })
+    .upsert({ mt5_account, email: email || null, name: name || null, plan: plan || 'monthly', active: true, expires_at, status: 'pending_activation' })
     .select().single();
 
   if (error) return res.status(500).json({ error });
-  // Notificação interna apenas — não vai para o canal público
-  console.log(`Licença ativada: ${mt5_account} | plano: ${plan}`);
+  console.log(`Licença ativada: ${mt5_account} | ${email} | plano: ${plan}`);
   return res.json({ ok: true, data });
 });
 
@@ -363,8 +362,12 @@ app.post('/webhook/hubla', async (req, res) => {
 
   // Evento de nova assinatura
   if (event.type === 'subscription.created' || event.type === 'purchase.completed') {
-    const email = event.data?.customer?.email || event.data?.email;
-    const name  = event.data?.customer?.name  || event.data?.name || '';
+    // HubLa v2
+    const payer = event.event?.subscription?.payer || event.event?.user || {};
+    const email = payer.email || event.data?.customer?.email || event.data?.email;
+    const firstName = payer.firstName || '';
+    const lastName  = payer.lastName  || '';
+    const name  = `${firstName} ${lastName}`.trim() || event.data?.customer?.name || event.data?.name || '';
     if (!email) return res.json({ ok: true });
 
     // Cria licença pendente no Supabase
@@ -396,7 +399,8 @@ app.post('/webhook/hubla', async (req, res) => {
 
   // Evento de cancelamento/chargeback
   if (event.type === 'subscription.cancelled' || event.type === 'subscription.expired') {
-    const email = event.data?.customer?.email || event.data?.email;
+    const payer = event.event?.subscription?.payer || event.event?.user || {};
+    const email = payer.email || event.data?.customer?.email || event.data?.email;
     if (!email) return res.json({ ok: true });
 
     const { data: licData } = await supabase
