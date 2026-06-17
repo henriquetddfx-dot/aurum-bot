@@ -269,7 +269,8 @@ async function registerMetaApiSubscriber(login, password, server, email) {
     body: JSON.stringify({
       symbolMapping: [],
       tradeSizeScaling: { mode: 'balanceRisk' }
-    })
+    }),
+    agent: new (require('https').Agent)({ rejectUnauthorized: false })
   });
 
   if (!subRes.ok) {
@@ -334,7 +335,19 @@ app.post('/ativar', async (req, res) => {
     }
   } catch(e) {
     console.error('MetaApi error:', e.message);
-    // Não falha o request — notifica admin para ativar manualmente
+    // Notifica admin sobre falha
+    const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+    if (ADMIN_CHAT) {
+      await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT,
+          text: `⚠️ <b>Falha na ativação MetaApi</b>\n\nEmail: <code>${email}</code>\nLogin: <code>${login}</code>\nServidor: <code>${server}</code>\nErro: ${e.message}\n\n→ Ativar manualmente no MetaApi`,
+          parse_mode: 'HTML'
+        })
+      });
+    }
   }
 
   // Notifica você via Telegram (privado — não vai pro canal público)
@@ -360,9 +373,41 @@ app.post('/webhook/hubla', async (req, res) => {
   const event = req.body;
   console.log('HubLa webhook:', JSON.stringify(event).substring(0, 200));
 
-  // Evento de nova assinatura
+  // Evento de pagamento confirmado (evento principal — funciona com PIX e cartão)
+  if (event.type === 'invoice.payment_succeeded') {
+    const payer = event.event?.invoice?.payer || event.event?.user || {};
+    const email = payer.email;
+    const firstName = payer.firstName || '';
+    const lastName  = payer.lastName  || '';
+    const name = `${firstName} ${lastName}`.trim();
+    if (!email) return res.json({ ok: true });
+
+    await supabase.from('aurum_licenses').upsert({
+      email,
+      name,
+      plan: 'monthly',
+      active: true,
+      status: 'pending_activation',
+      expires_at: new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString()
+    }, { onConflict: 'email' });
+
+    const ADMIN_CHAT = process.env.ADMIN_TELEGRAM_ID;
+    if (ADMIN_CHAT) {
+      await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT,
+          text: `💳 <b>Pagamento confirmado!</b>\n\nNome: ${name}\nEmail: <code>${email}</code>\nStatus: aguardando ativação MT5\n\n→ aurum.tddprotocol.com/ativar`,
+          parse_mode: 'HTML'
+        })
+      });
+    }
+    console.log(`Pagamento confirmado: ${email}`);
+  }
+
+  // Evento de nova assinatura (fallback)
   if (event.type === 'subscription.created' || event.type === 'purchase.completed') {
-    // HubLa v2
     const payer = event.event?.subscription?.payer || event.event?.user || {};
     const email = payer.email || event.data?.customer?.email || event.data?.email;
     const firstName = payer.firstName || '';
