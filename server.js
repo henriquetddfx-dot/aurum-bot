@@ -267,7 +267,10 @@ async function registerMetaApiSubscriber(login, password, server, email) {
       'auth-token': METAAPI_TOKEN
     },
     body: JSON.stringify({
-      symbolMapping: [],
+      symbolMapping: [
+        { from: 'XAUUSDm', to: 'XAUUSD' },
+        { from: 'XAUUSD',  to: 'XAUUSDm' }
+      ],
       tradeSizeScaling: { mode: 'balanceRisk' }
     }),
     agent: new (require('https').Agent)({ rejectUnauthorized: false })
