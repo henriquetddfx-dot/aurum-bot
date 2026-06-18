@@ -268,8 +268,8 @@ async function registerMetaApiSubscriber(login, password, server, email) {
     },
     body: JSON.stringify({
       symbolMapping: [
-        { from: 'XAUUSDm', to: 'XAUUSD' },
-        { from: 'XAUUSD',  to: 'XAUUSDm' }
+        { from: 'XAUUSD',  to: 'XAUUSDm' },
+        { from: 'XAUUSDm', to: 'XAUUSDm' }
       ],
       tradeSizeScaling: { mode: 'balanceRisk' }
     }),
