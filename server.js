@@ -747,13 +747,12 @@ app.post('/auth/verify-code', async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .single();
 
-  // Busca trades da ultima semana
+  // Busca trades
   const { data: trades } = await supabase
     .from('aurum_trades')
     .select('*')
     .eq('mt5_account', license.mt5_account)
-    .gte('closed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: false })
+    .order('closed_at', { ascending: false })
     .limit(20);
 
   const { mt5_password: _pw, ...safeLic } = license;
