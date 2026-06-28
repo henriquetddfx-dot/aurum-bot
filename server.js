@@ -756,7 +756,8 @@ app.post('/auth/verify-code', async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(20);
 
-  return res.json({ ok: true, license, trades: trades || [] });
+  const { mt5_password: _pw, ...safeLic } = license;
+  return res.json({ ok: true, license: safeLic, trades: trades || [] });
 });
 
 app.get('/minha-conta/dados', async (req, res) => {
@@ -780,7 +781,9 @@ app.get('/minha-conta/dados', async (req, res) => {
     .limit(20);
 
   console.log('trades:', license.mt5_account, 'count:', trades?.length, 'err:', tradesError?.message);
-  return res.json({ ok: true, license, trades: trades || [] });
+  // Remove dados sensiveis antes de enviar
+  const { mt5_password, ...safeLicense } = license;
+  return res.json({ ok: true, license: safeLicense, trades: trades || [] });
 });
 
 const PORT = process.env.PORT || 3000;
