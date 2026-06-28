@@ -612,5 +612,63 @@ app.post('/monitor/copy', async (req, res) => {
   }
 });
 
+
+// ── Resumo Semanal ───────────────────────────────────────────────────
+app.post('/summary/weekly', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== process.env.ADMIN_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  try {
+    // Lê historico da VPS via arquivo ou usa MetaApi
+    // Por enquanto gera resumo baseado nos trades do Supabase
+    const { data: trades } = await supabase
+      .from('aurum_trades')
+      .select('*')
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false });
+
+    if (!trades || trades.length === 0) {
+      const msg = `📊 <b>AURUM EA — Resumo Semanal</b>\n\nNenhuma operação registrada esta semana.\n\n<i>AURUM EA — Ouro. Automatizado.</i>`;
+      await fetch(`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'HTML' })
+      });
+      return res.json({ ok: true, trades: 0 });
+    }
+
+    const wins   = trades.filter(t => t.profit > 0);
+    const losses = trades.filter(t => t.profit <= 0);
+    const total  = trades.reduce((s, t) => s + (t.profit || 0), 0);
+    const best   = trades.reduce((a, b) => (a.profit > b.profit ? a : b));
+    const worst  = trades.reduce((a, b) => (a.profit < b.profit ? a : b));
+    const winRate = trades.length > 0 ? Math.round((wins.length / trades.length) * 100) : 0;
+
+    const resultEmoji = total >= 0 ? '🟢' : '🔴';
+    const sign = total >= 0 ? '+' : '';
+
+    const msg = `📊 <b>AURUM EA — Resumo Semanal</b>\n\n` +
+      `Operações: <b>${trades.length}</b>  |  Win rate: <b>${winRate}%</b>\n` +
+      `✅ Wins: <b>${wins.length}</b>   ❌ Losses: <b>${losses.length}</b>\n\n` +
+      `${resultEmoji} Resultado: <b>${sign}$${total.toFixed(2)}</b>\n\n` +
+      `🏆 Melhor trade: <b>+$${best.profit?.toFixed(2)}</b>\n` +
+      `📉 Pior trade: <b>$${worst.profit?.toFixed(2)}</b>\n\n` +
+      `<i>AURUM EA — Ouro. Automatizado.</i>`;
+
+    await fetch(`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHANNEL, text: msg, parse_mode: 'HTML' })
+    });
+
+    console.log(`Resumo semanal: \${trades.length} trades, resultado: \${total.toFixed(2)}`);
+    return res.json({ ok: true, trades: trades.length, total });
+  } catch(e) {
+    console.error('Resumo semanal error:', e.message);
+    return res.json({ ok: false, error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AURUM EA API rodando na porta ${PORT}`));
