@@ -751,7 +751,7 @@ app.post('/auth/verify-code', async (req, res) => {
   const { data: trades } = await supabase
     .from('aurum_trades')
     .select('*')
-    .eq('account', license.mt5_account)
+    .eq('mt5_account', license.mt5_account)
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: false })
     .limit(20);
@@ -775,7 +775,7 @@ app.get('/minha-conta/dados', async (req, res) => {
   const { data: trades } = await supabase
     .from('aurum_trades')
     .select('*')
-    .eq('account', license.mt5_account)
+    .eq('mt5_account', license.mt5_account)
     .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: false })
     .limit(20);
