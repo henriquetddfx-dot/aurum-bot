@@ -772,14 +772,14 @@ app.get('/minha-conta/dados', async (req, res) => {
 
   if (!license) return res.status(404).json({ error: 'nao encontrado' });
 
-  const { data: trades } = await supabase
+  const { data: trades, error: tradesError } = await supabase
     .from('aurum_trades')
     .select('*')
     .eq('mt5_account', license.mt5_account)
-    .gte('closed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: false })
+    .order('closed_at', { ascending: false })
     .limit(20);
 
+  console.log('trades:', license.mt5_account, 'count:', trades?.length, 'err:', tradesError?.message);
   return res.json({ ok: true, license, trades: trades || [] });
 });
 
