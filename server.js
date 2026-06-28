@@ -698,7 +698,7 @@ app.post('/auth/send-code', async (req, res) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_KEY}` },
     body: JSON.stringify({
-      from: 'AURUM EA <onboarding@resend.dev>',
+      from: 'AURUM EA <noreply@tddprotocol.com>',
       to: email,
       subject: 'Seu codigo de acesso — AURUM EA',
       html: `
