@@ -692,16 +692,16 @@ app.post('/auth/send-code', async (req, res) => {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   authCodes[email.toLowerCase()] = { code, expires: Date.now() + 10 * 60 * 1000 }; // 10 min
 
-  // Envia email via Resend
-  const RESEND_KEY = process.env.RESEND_API_KEY;
-  const emailRes = await fetch('https://api.resend.com/emails', {
+  // Envia email via Brevo
+  const BREVO_KEY = process.env.BREVO_API_KEY;
+  const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_KEY}` },
+    headers: { 'Content-Type': 'application/json', 'api-key': BREVO_KEY },
     body: JSON.stringify({
-      from: 'AURUM EA <onboarding@resend.dev>',
-      to: email,
-      subject: 'Seu codigo de acesso — AURUM EA',
-      html: `
+      sender: { name: 'AURUM EA', email: 'noreply@tddprotocol.com' },
+      to: [{ email }],
+      subject: 'Seu codigo de acesso - AURUM EA',
+      htmlContent: `
         <div style="background:#000;color:#fff;font-family:Inter,sans-serif;padding:40px;max-width:480px;margin:0 auto;border-radius:16px;">
           <p style="font-size:13px;color:#6e6e73;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;">AURUM EA</p>
           <h1 style="font-size:28px;font-weight:600;letter-spacing:-0.02em;margin-bottom:8px;">Seu codigo de acesso</h1>
@@ -710,7 +710,7 @@ app.post('/auth/send-code', async (req, res) => {
             <p style="font-size:42px;font-weight:700;letter-spacing:0.15em;color:#fff;margin:0;">${code}</p>
           </div>
           <p style="font-size:13px;color:#555;">Se voce nao solicitou este codigo, ignore este email.</p>
-          <p style="font-size:12px;color:#333;margin-top:24px;">AURUM EA — Ouro. Automatizado.</p>
+          <p style="font-size:12px;color:#333;margin-top:24px;">AURUM EA, Ouro. Automatizado.</p>
         </div>
       `
     })
@@ -718,7 +718,7 @@ app.post('/auth/send-code', async (req, res) => {
 
   const emailData = await emailRes.json();
   if (!emailRes.ok) {
-    console.error('Resend error:', emailData);
+    console.error('Brevo error:', emailData);
     return res.status(500).json({ error: 'erro ao enviar email' });
   }
 
