@@ -638,11 +638,11 @@ app.post('/summary/weekly', async (req, res) => {
       return res.json({ ok: true, trades: 0 });
     }
 
-    const wins   = trades.filter(t => t.profit > 0);
-    const losses = trades.filter(t => t.profit <= 0);
-    const total  = trades.reduce((s, t) => s + (t.profit || 0), 0);
-    const best   = trades.reduce((a, b) => (a.profit > b.profit ? a : b));
-    const worst  = trades.reduce((a, b) => (a.profit < b.profit ? a : b));
+    const wins   = trades.filter(t => t.profit_usd > 0);
+    const losses = trades.filter(t => t.profit_usd <= 0);
+    const total  = trades.reduce((s, t) => s + (t.profit_usd || 0), 0);
+    const best   = trades.reduce((a, b) => (a.profit_usd > b.profit_usd ? a : b));
+    const worst  = trades.reduce((a, b) => (a.profit_usd < b.profit_usd ? a : b));
     const winRate = trades.length > 0 ? Math.round((wins.length / trades.length) * 100) : 0;
 
     const resultEmoji = total >= 0 ? '🟢' : '🔴';
@@ -652,8 +652,8 @@ app.post('/summary/weekly', async (req, res) => {
       `Operações: <b>${trades.length}</b>  |  Win rate: <b>${winRate}%</b>\n` +
       `✅ Wins: <b>${wins.length}</b>   ❌ Losses: <b>${losses.length}</b>\n\n` +
       `${resultEmoji} Resultado: <b>${sign}$${total.toFixed(2)}</b>\n\n` +
-      `🏆 Melhor trade: <b>+$${best.profit?.toFixed(2)}</b>\n` +
-      `📉 Pior trade: <b>$${worst.profit?.toFixed(2)}</b>\n\n` +
+      `🏆 Melhor trade: <b>+$${best.profit_usd?.toFixed(2)}</b>\n` +
+      `📉 Pior trade: <b>$${worst.profit_usd?.toFixed(2)}</b>\n\n` +
       `<i>AURUM EA — Ouro. Automatizado.</i>`;
 
     await fetch(`https://api.telegram.org/bot\${TG_TOKEN}/sendMessage`, {
